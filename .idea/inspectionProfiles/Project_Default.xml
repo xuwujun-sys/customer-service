@@ -1,0 +1,19 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="minio" />
+          <option value="langchain-openai" />
+          <option value="langgraph" />
+          <option value="grandalf" />
+          <option value="pyvis" />
+          <option value="sentence-transformers" />
+          <option value="neo4j" />
+          <option value="openai-agents" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
