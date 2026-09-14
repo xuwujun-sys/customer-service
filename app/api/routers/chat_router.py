@@ -11,7 +11,7 @@ chat_router = APIRouter()
 @chat_router.post("/api/chat")
 async def chat(chat_request: ChatRequest,
                dialogue_service: DialogueService = Depends(get_dialogue_service))->ChatResponse:
-    process_resut : ProcessResult = dialogue_service.process_message(build_message(chat_request))
+    process_resut : ProcessResult = await dialogue_service.process_message(build_message(chat_request))
     return build_response(process_resut)
 
 @chat_router.get("/api/chat/history")

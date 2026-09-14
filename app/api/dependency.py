@@ -34,6 +34,6 @@ async def get_dialogue_service(
     repository: DialogueRepository = Depends(get_repository),
 ) -> DialogueService:
     return DialogueService(
-        dialogue_state_repository=repository,
+        dialogue_repository=repository,
         dialogue_engine=engine,
     )
