@@ -1,7 +1,5 @@
 from pathlib import Path
 
-from pydantic_settings.sources.providers import aws
-
 from app.chitchat.handler import ChitchatHandler
 from app.chitchat.responder import ChitchatResponder
 from app.clarify.clarify_respond import ClarifyResponder
@@ -154,7 +152,7 @@ class DialogueEngine:
         )
 
         if command is None:
-            return self.clarify_responder.respond(state=state,
+            return await self.clarify_responder.respond(state=state,
                                                   reason=ClarifyReason.OBJECT_REQUIRES_INTENT)
 
         return await self.task_handler.handle(

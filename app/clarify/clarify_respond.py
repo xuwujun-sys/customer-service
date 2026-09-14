@@ -23,7 +23,7 @@ class ClarifyResponder:
 
         user_message = self.get_user_message(message)
         history = BuildHistory.build_history(state.current_session().turns)
-        focused_object = json.dumps(state.focused_object.to_dict())
+        focused_object = json.dumps(state.focused_object.to_dict()) if state.focused_object else None
 
         prompt_text = load_prompt("clarify_respond")
         prompt = PromptTemplate.from_template(

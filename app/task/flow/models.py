@@ -38,7 +38,7 @@ class Flow:
 
     def start_step(self) -> Optional[StartFlowStep]:
         for step in self.steps:
-            if isinstance(step, FlowStepType.START):
+            if isinstance(step, StartFlowStep):
                 return step
         return None
 

@@ -30,7 +30,7 @@ class SystemContext:
     @classmethod
     def from_dict(cls, data: dict[str, Any])->"SystemContext":
         clz = mapping_types[data["flow_id"]]
-        return cls(**data)
+        return clz(**data)
 
 @dataclass
 class StartedSystemContext(SystemContext):

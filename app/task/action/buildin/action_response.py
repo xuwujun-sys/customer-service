@@ -15,7 +15,7 @@ class ActionResponse(Action):
         context = state.active_system_task or state.active_task
         text = action_kwargs.get("text", "")
         prompt = action_kwargs.get("prompt", "")
-        model = action_kwargs.get("model", "static")
+        model = action_kwargs.get("mode", "static")
 
         if model == "static":
             rendered_text = self._render_template(text, state, context)
@@ -33,7 +33,7 @@ class ActionResponse(Action):
     def _render_template(self, template: str, state: DialogueState, context) -> str:
         jinja_template = Template(template)
         rendered_text = jinja_template.render(
-            slots=state.active_system_task.slots if state.active_system_task else {},
+            slots=state.active_task.slots if state.active_task else {},
             context=context
         )
         return rendered_text
@@ -47,7 +47,7 @@ class ActionResponse(Action):
         chain = template | llm | stroutputparser
 
         result = await chain.ainvoke(
-           { "history" : BuildHistory.build_history(state.turns),
+           { "history" : BuildHistory.build_history(state.current_session().turns),
             "user_message" : BuildHistory.get_latest_user_message(state.pending_turn),
             "current_response" : rendered_text,}
         )

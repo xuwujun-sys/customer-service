@@ -25,6 +25,7 @@ class KnowledgeProvider(ABC):
         return []
 
 class ProductAPIProvider(KnowledgeProvider):
+    provider_id = 'api.product'
 
     async def retrieve(self, state: DialogueState) -> list[KnowledgeChunk]:
         product_id = state.focused_object.id
@@ -35,7 +36,6 @@ class ProductAPIProvider(KnowledgeProvider):
 
     async def get_product_by_id(self, product_id: str):
         url = f"{settings.commerce_api_base_url}/products/{product_id}"
-        await http_client.client_init()
         response = await http_client.client.get(url)
         return response.json()["data"]
 class OrderAPIProvider(KnowledgeProvider):
@@ -67,12 +67,12 @@ class OrderAPIProvider(KnowledgeProvider):
 
     async def _fetch_order(self, order_number) -> dict[str, Any]:
         url = f"{settings.commerce_api_base_url}/orders/{order_number}"
-        response = await http_client.http_client.get(url)
+        response = await http_client.client.get(url)
         return response.json()["data"]
 
     async def _fetch_logistics(self, order_number) -> dict[str, Any]:
         url = f"{settings.commerce_api_base_url}/orders/{order_number}/logistics"
-        response = await http_client.http_client.get(url)
+        response = await http_client.client.get(url)
         return response.json().get("data", {})
 
 

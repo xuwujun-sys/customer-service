@@ -68,7 +68,7 @@ class FlowExecutor():
                         return None
 
             else:
-                self._select_next_step(step, state)
+                self._advance_next_step(step, state)
                 return None
 
         else:
@@ -83,8 +83,9 @@ class FlowExecutor():
         return None
 
     def _run_action_step(self, step: ActionFlowStep, state: DialogueState)->ActionCall | None:
+        action_call = self._build_action_call(step, state)
         self._advance_next_step(step, state)
-        self._build_action_call(step, state)
+        return action_call
 
     def _run_end_step(self,state: DialogueState)->ActionCall | None:
         if state.active_system_task:
@@ -109,16 +110,19 @@ class FlowExecutor():
                 return link.target
 
     def _eval_cond(self, condition: str, state:DialogueState)->bool:
+        current_task = state.active_system_task or state.active_task
         data = {
-            "context": dict(state.active_system_task or state.active_task),
-            "slots": state.active_task.slots
+            "context": current_task.to_dict() if current_task else {},
+            "slots": state.active_task.slots if state.active_task else {}
         }
-        return bool(eval(condition, data, {}))
+        return bool(eval(condition, {"__builtins__": {}}, data))
 
     def _advance_next_step(self,step: FlowStep,state: DialogueState):
 
         res = self._select_next_step(step,state)
-        state.active_task.step_id = res
+        # 步进要作用于"当前正在执行"的任务：系统任务在执行时是 active_system_task
+        current_task = state.active_system_task or state.active_task
+        current_task.step_id = res
 
     def _build_action_call(self, step: ActionFlowStep, state: DialogueState) -> ActionCall:
         action_name = step.action

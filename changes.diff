@@ -1,0 +1,290 @@
+diff --git a/app/clarify/clarify_respond.py b/app/clarify/clarify_respond.py
+index 373e446..82c06c2 100644
+--- a/app/clarify/clarify_respond.py
++++ b/app/clarify/clarify_respond.py
+@@ -23,7 +23,7 @@ class ClarifyResponder:
+ 
+         user_message = self.get_user_message(message)
+         history = BuildHistory.build_history(state.current_session().turns)
+-        focused_object = json.dumps(state.focused_object.to_dict())
++        focused_object = json.dumps(state.focused_object.to_dict()) if state.focused_object else None
+ 
+         prompt_text = load_prompt("clarify_respond")
+         prompt = PromptTemplate.from_template(
+diff --git a/app/domain/contexts.py b/app/domain/contexts.py
+index 36574a1..8abf0dc 100644
+--- a/app/domain/contexts.py
++++ b/app/domain/contexts.py
+@@ -30,7 +30,7 @@ class SystemContext:
+     @classmethod
+     def from_dict(cls, data: dict[str, Any])->"SystemContext":
+         clz = mapping_types[data["flow_id"]]
+-        return cls(**data)
++        return clz(**data)
+ 
+ @dataclass
+ class StartedSystemContext(SystemContext):
+diff --git a/app/engine/dialogue_engine.py b/app/engine/dialogue_engine.py
+index d6ec24d..d84bc48 100644
+--- a/app/engine/dialogue_engine.py
++++ b/app/engine/dialogue_engine.py
+@@ -1,7 +1,5 @@
+ from pathlib import Path
+ 
+-from pydantic_settings.sources.providers import aws
+-
+ from app.chitchat.handler import ChitchatHandler
+ from app.chitchat.responder import ChitchatResponder
+ from app.clarify.clarify_respond import ClarifyResponder
+@@ -154,7 +152,7 @@ class DialogueEngine:
+         )
+ 
+         if command is None:
+-            return self.clarify_responder.respond(state=state,
++            return await self.clarify_responder.respond(state=state,
+                                                   reason=ClarifyReason.OBJECT_REQUIRES_INTENT)
+ 
+         return await self.task_handler.handle(
+diff --git a/app/knowledge/provider.py b/app/knowledge/provider.py
+index dc72854..84ca397 100644
+--- a/app/knowledge/provider.py
++++ b/app/knowledge/provider.py
+@@ -25,6 +25,7 @@ class KnowledgeProvider(ABC):
+         return []
+ 
+ class ProductAPIProvider(KnowledgeProvider):
++    provider_id = 'api.product'
+ 
+     async def retrieve(self, state: DialogueState) -> list[KnowledgeChunk]:
+         product_id = state.focused_object.id
+@@ -35,7 +36,6 @@ class ProductAPIProvider(KnowledgeProvider):
+ 
+     async def get_product_by_id(self, product_id: str):
+         url = f"{settings.commerce_api_base_url}/products/{product_id}"
+-        await http_client.client_init()
+         response = await http_client.client.get(url)
+         return response.json()["data"]
+ class OrderAPIProvider(KnowledgeProvider):
+@@ -67,12 +67,12 @@ class OrderAPIProvider(KnowledgeProvider):
+ 
+     async def _fetch_order(self, order_number) -> dict[str, Any]:
+         url = f"{settings.commerce_api_base_url}/orders/{order_number}"
+-        response = await http_client.http_client.get(url)
++        response = await http_client.client.get(url)
+         return response.json()["data"]
+ 
+     async def _fetch_logistics(self, order_number) -> dict[str, Any]:
+         url = f"{settings.commerce_api_base_url}/orders/{order_number}/logistics"
+-        response = await http_client.http_client.get(url)
++        response = await http_client.client.get(url)
+         return response.json().get("data", {})
+ 
+ 
+diff --git a/app/task/action/buildin/action_response.py b/app/task/action/buildin/action_response.py
+index a68bc30..648c442 100644
+--- a/app/task/action/buildin/action_response.py
++++ b/app/task/action/buildin/action_response.py
+@@ -15,7 +15,7 @@ class ActionResponse(Action):
+         context = state.active_system_task or state.active_task
+         text = action_kwargs.get("text", "")
+         prompt = action_kwargs.get("prompt", "")
+-        model = action_kwargs.get("model", "static")
++        model = action_kwargs.get("mode", "static")
+ 
+         if model == "static":
+             rendered_text = self._render_template(text, state, context)
+@@ -33,7 +33,7 @@ class ActionResponse(Action):
+     def _render_template(self, template: str, state: DialogueState, context) -> str:
+         jinja_template = Template(template)
+         rendered_text = jinja_template.render(
+-            slots=state.active_system_task.slots if state.active_system_task else {},
++            slots=state.active_task.slots if state.active_task else {},
+             context=context
+         )
+         return rendered_text
+@@ -47,7 +47,7 @@ class ActionResponse(Action):
+         chain = template | llm | stroutputparser
+ 
+         result = await chain.ainvoke(
+-           { "history" : BuildHistory.build_history(state.turns),
++           { "history" : BuildHistory.build_history(state.current_session().turns),
+             "user_message" : BuildHistory.get_latest_user_message(state.pending_turn),
+             "current_response" : rendered_text,}
+         )
+diff --git a/app/task/command/processor.py b/app/task/command/processor.py
+index 8af2b72..6754342 100644
+--- a/app/task/command/processor.py
++++ b/app/task/command/processor.py
+@@ -1,4 +1,4 @@
+-from app.domain.contexts import CanceledSystemContext, InterruptedSystemContext, ResumedSystemContext, StartedSystemContext, TaskContext
++from app.domain.contexts import CanceledSystemContext, CollectSystemContext, InterruptedSystemContext, ResumedSystemContext, StartedSystemContext, TaskContext
+ from app.domain.dialogue_state import DialogueState
+ from app.task.command.models import Command, StartFlowCommand, SetSlotsCommand, CancelFlowCommand, ResumeFlowCommand
+ from app.task.flow.models import Flow, FlowsList
+@@ -54,13 +54,14 @@ class CommandProcessor:
+                     step_id=start_step.id
+                 ))
+ 
++                interrupted_flow = flows.flow_by_id("system_task_interrupted")
+                 state.start_new_system_task(InterruptedSystemContext(
+-                    started_flow_id="system_task_interrupted",
+-                    started_flow_name=flows.flow_by_id("system_task_interrupted").name,
++                    flow_id="system_task_interrupted",
++                    step_id=interrupted_flow.start_step().id,
++                    started_flow_id=target_flow_id,
++                    started_flow_name=target_flow.name,
+                     interrupted_flow_id=active_flow.id,
+                     interrupted_flow_name=active_flow.name,
+-                    flow_id=target_flow_id,
+-                    flow_name=target_flow.name,
+                 ))
+ 
+         else:
+@@ -69,11 +70,12 @@ class CommandProcessor:
+                 step_id=start_step.id
+             ))
+ 
++            started_flow = flows.flow_by_id("system_task_started")
+             state.start_new_system_task(StartedSystemContext(
+-                flow_id=target_flow_id,
+-                flow_name=target_flow.name,
+-                started_flow_id="system_task_started",
+-                started_flow_name=flows.flow_by_id(target_flow_id).name
++                flow_id="system_task_started",
++                step_id=started_flow.start_step().id,
++                started_flow_id=target_flow_id,
++                started_flow_name=target_flow.name,
+             ))
+ 
+ 
+@@ -85,6 +87,12 @@ class CommandProcessor:
+         slots = command.slots
+         if state.active_task:
+             state.active_task.slots.update(slots)
++            # 如果收集系统任务等的槽位已被填上，结束收集任务，让流程继续
++            system_task = state.active_system_task
++            if isinstance(system_task, CollectSystemContext) \
++                    and system_task.slot_name in slots \
++                    and state.active_task.slots.get(system_task.slot_name):
++                state.end_system_task()
+         else:
+             return
+ 
+@@ -99,13 +107,13 @@ class CommandProcessor:
+ 
+         state.cancel_active_task()
+ 
+-        start_step=cancelled_flow.start_step()
++        canceled_system_flow = flows.flow_by_id("system_task_canceled")
+ 
+         state.start_new_system_task(CanceledSystemContext(
++            flow_id="system_task_canceled",
++            step_id=canceled_system_flow.start_step().id,
+             canceled_flow_id=cancelled_flow.id,
+             canceled_flow_name=cancelled_flow.name,
+-            flow_id="system_task_canceled",
+-            flow_name=state.flows.flow_by_id(cancelled_flow_id).name,
+         ))
+ 
+     def _handle_resume_flow(
+@@ -123,27 +131,30 @@ class CommandProcessor:
+                 # 如果当前任务就是要恢复的任务，则不做任何操作
+                 return
+             else:
++                interrupted_flow = flows.flow_by_id(active_task.flow_id)
+                 state.pause_active_task()
+                 state.start_new_task(TaskContext(
+                     flow_id=resumed_flow_id,
+                     step_id=resumed_flow.start_step().id
+                 ))
++                interrupted_system_flow = flows.flow_by_id("system_task_interrupted")
+                 state.start_new_system_task(InterruptedSystemContext(
+-                    started_flow_id="system_task_interrupted",
+-                    started_flow_name=flows.flow_by_id("system_task_interrupted").name,
+-                    interrupted_flow_id=active_task.id,
+-                    interrupted_flow_name=active_task.flow_name,
+-                    flow_id=resumed_flow_id,
+-                    flow_name=resumed_flow.name,
++                    flow_id="system_task_interrupted",
++                    step_id=interrupted_system_flow.start_step().id,
++                    started_flow_id=resumed_flow_id,
++                    started_flow_name=resumed_flow.name,
++                    interrupted_flow_id=interrupted_flow.id,
++                    interrupted_flow_name=interrupted_flow.name,
+                 ))
+         else:
+             task = state.match_task_to_resume(resumed_flow_id)
+             state.start_new_task(task)
++            resumed_system_flow = flows.flow_by_id("system_task_resumed")
+             state.start_new_system_task(ResumedSystemContext(
++                flow_id="system_task_resumed",
++                step_id=resumed_system_flow.start_step().id,
+                 resumed_flow_id=resumed_flow.id,
+                 resumed_flow_name=resumed_flow.name,
+-                flow_id="system_task_resumed",
+-                flow_name=flows.flow_by_id(resumed_flow_id).name,
+             ))
+ 
+         
+\ No newline at end of file
+diff --git a/app/task/flow/flow_executor.py b/app/task/flow/flow_executor.py
+index 89016f3..9f74598 100644
+--- a/app/task/flow/flow_executor.py
++++ b/app/task/flow/flow_executor.py
+@@ -68,7 +68,7 @@ class FlowExecutor():
+                         return None
+ 
+             else:
+-                self._select_next_step(step, state)
++                self._advance_next_step(step, state)
+                 return None
+ 
+         else:
+@@ -83,8 +83,9 @@ class FlowExecutor():
+         return None
+ 
+     def _run_action_step(self, step: ActionFlowStep, state: DialogueState)->ActionCall | None:
++        action_call = self._build_action_call(step, state)
+         self._advance_next_step(step, state)
+-        self._build_action_call(step, state)
++        return action_call
+ 
+     def _run_end_step(self,state: DialogueState)->ActionCall | None:
+         if state.active_system_task:
+@@ -109,16 +110,19 @@ class FlowExecutor():
+                 return link.target
+ 
+     def _eval_cond(self, condition: str, state:DialogueState)->bool:
++        current_task = state.active_system_task or state.active_task
+         data = {
+-            "context": dict(state.active_system_task or state.active_task),
+-            "slots": state.active_task.slots
++            "context": current_task.to_dict() if current_task else {},
++            "slots": state.active_task.slots if state.active_task else {}
+         }
+-        return bool(eval(condition, data, {}))
++        return bool(eval(condition, {"__builtins__": {}}, data))
+ 
+     def _advance_next_step(self,step: FlowStep,state: DialogueState):
+ 
+         res = self._select_next_step(step,state)
+-        state.active_task.step_id = res
++        # 步进要作用于"当前正在执行"的任务：系统任务在执行时是 active_system_task
++        current_task = state.active_system_task or state.active_task
++        current_task.step_id = res
+ 
+     def _build_action_call(self, step: ActionFlowStep, state: DialogueState) -> ActionCall:
+         action_name = step.action
+diff --git a/app/task/flow/models.py b/app/task/flow/models.py
+index 9ed8a0a..942026a 100644
+--- a/app/task/flow/models.py
++++ b/app/task/flow/models.py
+@@ -38,7 +38,7 @@ class Flow:
+ 
+     def start_step(self) -> Optional[StartFlowStep]:
+         for step in self.steps:
+-            if isinstance(step, FlowStepType.START):
++            if isinstance(step, StartFlowStep):
+                 return step
+         return None
+ 
