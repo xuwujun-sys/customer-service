@@ -1,7 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.engine.dialogue_engine import DialogueEngine
+from app.engine.dialogue_engine import DialogueEngine, build_dialogue_engine
 from app.repository.dialogue_state_repository import DialogueRepository
 from app.services.dialogue_service import DialogueService
 

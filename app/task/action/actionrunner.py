@@ -29,5 +29,3 @@ class ActionRunner:
         action_name = action_call.action_name
         action = self.registry.get(action_name)
         return await action.run(state, action_call.action_kwargs)
-
-action_runner = ActionRunner()

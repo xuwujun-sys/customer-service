@@ -5,12 +5,12 @@ from app.domain.dialogue_service_domain import BotMessage
 from app.domain.dialogue_state import DialogueState
 from app.task.action.actionrunner import ActionCall
 from app.task.flow.models import FlowsList, Flow
-from app.task.action.actionrunner import action_runner
+from app.task.action.actionrunner import ActionRunner
 from app.task.flow.steps import *
 
 class FlowExecutor():
 
-    async def run_task(self, state: DialogueState, flows: FlowsList) -> list[BotMessage]:
+    async def run_task(self, state: DialogueState, flows: FlowsList, action_runner: ActionRunner) -> list[BotMessage]:
         messages = []
         while True:
             action_call = self.advance_until_action(state, flows)
