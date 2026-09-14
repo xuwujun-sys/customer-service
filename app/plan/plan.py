@@ -13,21 +13,20 @@ from app.domain.dialogue_service_domain import MessageType
 from app.task.flow.models import FlowsList
 
 
-def get_user_message(self, user_message):
+def get_user_message(user_message):
     if user_message.type == MessageType.TEXT:
         return user_message.text
     elif user_message.type == MessageType.OBJECT:
         return str(user_message.object.to_dict())
 
 def _build_prompt_inputs(
-    self,
     state: DialogueState,
     flows: FlowsList,
     knowledge_intents: dict[str, KnowledgeIntent],
 ) -> dict[str, Any]:
     """把当前对话状态整理成 turn_plan 提示词需要的输入变量。"""
 
-    user_message = self.get_user_message(
+    user_message = get_user_message(
         state.pending_turn.user_message
     )
 
@@ -91,7 +90,6 @@ def _build_prompt_inputs(
 
 
 async def _predict_from_prompt_inputs(
-    self,
     prompt_inputs: dict[str, Any],
 ) -> TurnPlan:
     """调用 LLM，根据提示词输入生成本轮 TurnPlan。"""
