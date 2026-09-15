@@ -1,0 +1,18 @@
+flowchart LR
+    ENTRY(["已配置的用户 Flow"]) --> SELECT{"业务类型"}
+    SELECT --> ONBOARD["onboarding"]
+    SELECT --> ORDER["order_status_query"]
+    SELECT --> LOGISTICS["logistics_tracking"]
+    SELECT --> REFUND["refund_request"]
+    SELECT --> SIMILAR["similar_product_recommendation"]
+    SELECT --> HUMAN["human_handoff"]
+
+    ONBOARD --> O1["输出欢迎和能力介绍"] --> END1(["结束"])
+    ORDER --> O2["收集 order_number"] --> O3["调用订单详情 API"] --> O4["渲染状态和摘要"] --> END2(["结束"])
+    LOGISTICS --> L2["收集 order_number"] --> L3["调用物流 API"] --> L4["渲染公司、单号和进度"] --> END3(["结束"])
+    REFUND --> R2["收集 order_number"] --> R3["收集 refund_reason"] --> R4["输出提交确认<br/>当前未调用真实退款 API"] --> END4(["结束"])
+    SIMILAR --> S2{"存在 product_id？"}
+    S2 -->|"否"| S3["提示先选择商品"] --> END5(["结束"])
+    S2 -->|"是"| S4["商品详情 + 最近商品<br/>属性相似度和价格差排序"] --> S5["返回最多 3 个推荐"] --> END5
+    HUMAN --> H2["输出转接提示<br/>当前未接真实人工系统"] --> END6(["结束"])
+

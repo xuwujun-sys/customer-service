@@ -1,0 +1,21 @@
+flowchart TD
+    USER(["用户发送消息"]) --> ROUTER["chat_router.chat"]
+    ROUTER --> BUILD["build_message<br/>ChatRequest → Message"]
+    BUILD --> LOAD["DialogueService.load_state(sender_id)"]
+    LOAD --> SESSION{"当前 Session 是否存在且未超时？"}
+    SESSION -->|"不存在"| NEW["创建 Session"]
+    SESSION -->|"超过 1 小时"| RESET["关闭旧 Session<br/>清空运行时任务<br/>创建新 Session"]
+    SESSION -->|"有效"| TOUCH["刷新 last_activity_at"]
+    NEW --> TURN["创建 pending_turn"]
+    RESET --> TURN
+    TOUCH --> TURN
+    TURN --> TYPE{"MessageType"}
+    TYPE -->|"TEXT"| TEXT["规划、校验并分流"]
+    TYPE -->|"OBJECT"| OBJECT["保存 focused_object<br/>尝试补槽"]
+    TEXT --> MESSAGES["得到 BotMessage 列表"]
+    OBJECT --> MESSAGES
+    MESSAGES --> COMMIT["机器人回复写入 pending_turn<br/>commit_pending_turn"]
+    COMMIT --> SAVE["Repository.save_state"]
+    SAVE --> RESPONSE["build_response<br/>ProcessResult → ChatResponse"]
+    RESPONSE --> USER_END(["返回前端"])
+

@@ -1,0 +1,26 @@
+flowchart TD
+    INPUT["DialogueState + pending_turn"] --> BUILD["_build_prompt_inputs"]
+    BUILD --> HISTORY["已完成的 Session.turns"]
+    BUILD --> CURRENT["本轮 user_message"]
+    BUILD --> FLOWS["可用 Flow<br/>ID、名称、描述、槽位"]
+    BUILD --> ACTIVE["active_task"]
+    BUILD --> PAUSED["paused_tasks"]
+    BUILD --> FOCUS["focused_object"]
+    BUILD --> INTENTS["knowledge_intents"]
+    HISTORY --> PROMPT["Jinja2 plan_prompt"]
+    CURRENT --> PROMPT
+    FLOWS --> PROMPT
+    ACTIVE --> PROMPT
+    PAUSED --> PROMPT
+    FOCUS --> PROMPT
+    INTENTS --> PROMPT
+    PROMPT --> LLM["LLM<br/>temperature = 0"]
+    LLM --> JSON["JsonOutputParser<br/>JSON 文本 → dict"]
+    JSON --> MODEL["TurnPlan.from_dict<br/>Command.from_dict"]
+    MODEL --> VALIDATOR["TurnPlanValidator"]
+    VALIDATOR --> CHECK{"计划是否可执行？"}
+    CHECK -->|"否"| CLARIFY["ClarifyResponder<br/>追问用户"]
+    CHECK -->|"Task"| TASK["TaskHandler"]
+    CHECK -->|"Knowledge"| KNOW["KnowledgeHandler"]
+    CHECK -->|"Chitchat"| CHAT["ChitchatHandler"]
+

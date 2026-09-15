@@ -1,0 +1,16 @@
+flowchart LR
+    FE["客服前端"] -->|"POST /api/chat"| API["FastAPI API 层"]
+    API --> SVC["DialogueService<br/>加载状态 → 调用引擎 → 保存状态"]
+    SVC <--> REPO["DialogueRepository"]
+    REPO <--> DB[("MySQL<br/>DialogueState JSON")]
+    SVC --> ENGINE["DialogueEngine<br/>中央调度"]
+    ENGINE --> PLAN["TurnPlanner + Validator"]
+    PLAN <--> LLM["LLM API"]
+    ENGINE --> TASK["TaskHandler<br/>固定业务流程"]
+    ENGINE --> KNOW["KnowledgeHandler<br/>资料检索问答"]
+    ENGINE --> CHAT["ChitchatHandler<br/>闲聊"]
+    TASK --> COMMERCE["模拟电商 API"]
+    KNOW --> COMMERCE
+    KNOW --> LLM
+    CHAT --> LLM
+

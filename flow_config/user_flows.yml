@@ -1,3 +1,11 @@
+# 【文件职责】声明面向用户的业务 Flow 和它们共享的槽位元数据。
+# 【加载者】FlowLoader.load_many；加载后供 TurnPlanner、CommandProcessor、
+# FlowExecutor 共同使用。
+# 【关键联动】flow ID 会出现在 Start/ResumeFlowCommand；slot 名会进入
+# TaskContext.slots；action 名必须能在 ActionRegistry 中找到。
+# 这里描述的是静态流程图，某位用户的实时 step_id/slots 存在 DialogueState 中。
+
+# 全局槽位目录：collect 节点通过 slot_name 引用，下游 Action/模板通过同名键读写。
 slots:
   order_number:
     type: text
@@ -40,6 +48,7 @@ slots:
     description: 申请退款的原因
 
 flows:
+  # 欢迎引导：纯回复型 Flow，不收集数据；目前需要系统或调用者主动启动。
   onboarding:
     name: 欢迎引导
     description: 在聊天窗口初次打开时欢迎用户，并介绍助手可处理的电商服务。这个 flow 通常由系统主动触发。
@@ -60,6 +69,7 @@ flows:
         next: []
 
   order_status_query:
+    # 主链：start -> 收集订单号 -> 调订单接口 Action -> 模板回复 -> end。
     name: 订单状态查询
     description: 帮用户查询订单当前的处理状态，例如待付款、待发货、已发货或已完成。
     steps:
@@ -69,6 +79,7 @@ flows:
 
       - id: ask_order_number
         type: collect
+        # 缺值时 Executor 保持业务游标在本节点，并启动 system_collect_information。
         slot_name: order_number
         response:
           text: "请告诉我你的订单号。"
@@ -76,6 +87,7 @@ flows:
 
       - id: lookup_order_status
         type: action
+        # 输出 order_status/order_summary 两个槽位，供下一节点模板读取。
         action: action_lookup_order_status
         next: show_order_status
 
@@ -91,6 +103,7 @@ flows:
         next: []
 
   logistics_tracking:
+    # 与订单查询共享 order_number，但业务 Action 和结果槽位不同。
     name: 物流查询
     description: 帮用户查询订单物流进度、物流单号和配送公司信息。
     steps:
@@ -107,6 +120,7 @@ flows:
 
       - id: lookup_logistics
         type: action
+        # 输出 tracking_number/logistics_company/logistics_status。
         action: action_lookup_logistics
         next: show_logistics
 
@@ -122,6 +136,7 @@ flows:
         next: []
 
   refund_request:
+    # 教学版退款：只收集并回复确认，当前没有调用真实退款提交接口。
     name: 退款申请
     description: 帮用户提交简单的退款申请，收集订单号和退款原因。
     steps:
@@ -138,6 +153,7 @@ flows:
 
       - id: ask_refund_reason
         type: collect
+        # 订单号已有后继续收集第二个槽位，两个值都保留在同一 TaskContext.slots。
         slot_name: refund_reason
         response:
           text: "请简单说一下退款原因。"
@@ -155,6 +171,7 @@ flows:
         next: []
 
   similar_product_recommendation:
+    # 起点使用条件链接；FlowExecutor 按声明顺序判断，else 必须留在最后兜底。
     name: 相似商品推荐
     description: 基于当前商品为用户推荐类似商品。当前版本先保留流程入口，具体推荐能力后续接入。
     steps:
@@ -174,6 +191,7 @@ flows:
 
       - id: respond
         type: action
+        # 此 Action 自己返回 BotMessage，后面无需再接 action_response。
         action: action_recommend_similar_products
         next: end
 
@@ -182,6 +200,7 @@ flows:
         next: []
 
   human_handoff:
+    # 当前仅回复“正在转接”，尚未接入真实人工客服平台或会话队列。
     name: 人工客服
     description: 将当前对话转交给人工客服处理。
     steps:

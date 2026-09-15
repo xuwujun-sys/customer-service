@@ -1,0 +1,20 @@
+flowchart TD
+    USER(["用户提出信息咨询"]) --> PLAN["TurnPlanner 识别 Knowledge intents"]
+    PLAN --> VALIDATE["Validator 检查 intent<br/>以及 required_object"]
+    VALIDATE --> OK{"具备必要对象？"}
+    OK -->|"否"| CLARIFY["请先发送商品或订单"]
+    OK -->|"是"| PAUSE["若存在 active_task<br/>先移入 paused_tasks"]
+    PAUSE --> HANDLER["KnowledgeHandler"]
+    HANDLER --> MAP["intent → provider_ids"]
+    MAP --> PRODUCT["ProductAPIProvider"]
+    MAP --> ORDER["OrderAPIProvider"]
+    MAP --> FAQ["FAQProvider<br/>当前为占位"]
+    MAP --> RAG["RAGProvider<br/>当前为占位"]
+    PRODUCT --> CHUNKS["KnowledgeChunk 列表"]
+    ORDER --> CHUNKS
+    FAQ --> CHUNKS
+    RAG --> CHUNKS
+    CHUNKS --> RESPONDER["KnowledgeResponder<br/>历史 + 当前问题 + 检索资料"]
+    RESPONDER --> LLM["LLM 基于资料组织回答"]
+    LLM --> BOT(["BotMessage"])
+

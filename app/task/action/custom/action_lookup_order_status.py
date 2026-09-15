@@ -1,3 +1,9 @@
+"""查询订单详情的自定义 Action，并整理成状态与摘要两个 Flow 槽位。
+
+由用户 Flow 的同名 action 节点调用，下游依赖 commerce_client。输出字段随后由
+YAML action_response 模板拼接；特别是 order_summary 必须自带完整句尾。
+"""
+
 from typing import Any
 
 from app.domain.dialogue_state import DialogueState
@@ -16,6 +22,11 @@ class ActionLookupOrderStatus(Action):
     name = 'action_lookup_order_status'
 
     async def run(self, state: DialogueState, action_kwargs: dict[str, Any]) -> ActionResult:
+        """根据 active_task.slots.order_number 查询订单并转换结果。
+
+        缺订单号和接口异常都被转换为可渲染槽位，而不是抛出技术错误。404 与服务
+        故障给出不同建议。方法本身不推进 Step，也不直接写槽位。
+        """
         slots = state.active_task.slots if state.active_task else {}
         order_number = str(slots.get("order_number") or "").strip()
 
@@ -45,7 +56,11 @@ class ActionLookupOrderStatus(Action):
 
 
 def _build_summary(data: dict[str, Any]) -> str:
-    """把详情拼成一句人话：金额、下单时间、买了什么，再接商家的 status_desc。"""
+    """把订单接口结构整理成可直接接在状态后的自然语言摘要。
+
+    输入是接口 JSON；输出可能包含金额、时间、前两项商品与商家状态说明。函数
+    只做纯数据转换，便于独立测试，且保证非空摘要以中文句号结束。
+    """
     parts: list[str] = []
 
     amount = data.get("amount")
@@ -58,6 +73,7 @@ def _build_summary(data: dict[str, Any]) -> str:
 
     items = data.get("items") or []
     if items:
+        # 标题只展示前两项以控制长度，但件数统计覆盖全部明细。
         titles = "、".join(str(item.get("title") or "") for item in items[:2])
         quantity = sum(int(item.get("quantity") or 0) for item in items)
         more = f" 等 {quantity} 件" if len(items) > 2 else ""

@@ -1,0 +1,13 @@
+{
+  "theme": "neutral",
+  "fontFamily": "Microsoft YaHei, Segoe UI, sans-serif",
+  "flowchart": {
+    "curve": "basis",
+    "htmlLabels": true,
+    "useMaxWidth": false
+  },
+  "sequence": {
+    "useMaxWidth": false,
+    "wrap": true
+  }
+}

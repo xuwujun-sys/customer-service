@@ -1,0 +1,23 @@
+stateDiagram-v2
+    state "退款进行中" as RefundActive
+    state "等待退款订单号" as RefundCollect
+    state "退款任务已暂停" as RefundPaused
+    state "物流查询进行中" as LogisticsActive
+    state "物流查询完成" as LogisticsDone
+    state "退款任务已恢复" as RefundResumed
+    state "等待退款原因" as RefundReason
+    state "退款流程完成" as RefundDone
+    [*] --> RefundActive: start_flow(refund_request)
+    RefundActive --> RefundCollect: 缺少 order_number
+    RefundCollect --> RefundPaused: 用户转而查物流
+    note right of RefundPaused
+      退款 TaskContext 进入 paused_tasks
+      原 step_id 与 slots 保留
+    end note
+    RefundPaused --> LogisticsActive: start_flow(logistics_tracking)
+    LogisticsActive --> LogisticsDone: 填入订单号并查询物流
+    LogisticsDone --> RefundResumed: resume_flow(refund_request)
+    RefundResumed --> RefundCollect: 恢复原 TaskContext
+    RefundCollect --> RefundReason: set_slots(order_number)
+    RefundReason --> RefundDone: set_slots(refund_reason)
+    RefundDone --> [*]

@@ -1,0 +1,20 @@
+flowchart TD
+    OBJECT(["收到商品或订单对象"]) --> FOCUS["保存为 focused_object"]
+    FOCUS --> COLLECT["_current_collect_slot_name"]
+    COLLECT --> SYS{"存在 CollectSystemContext？"}
+    SYS -->|"是"| SLOT1["读取 active_system_task.slot_name"]
+    SYS -->|"否"| ACTIVE{"存在 active_task？"}
+    ACTIVE -->|"是"| STEP["读取 active_task 当前 FlowStep"]
+    STEP --> ISCOLLECT{"是 CollectSlotStep？"}
+    ISCOLLECT -->|"是"| SLOT2["读取 step.slot_name"]
+    ISCOLLECT -->|"否"| NONE["没有明确收集目标"]
+    ACTIVE -->|"否"| NONE
+    SLOT1 --> MATCH{"对象类型与槽位匹配？"}
+    SLOT2 --> MATCH
+    MATCH -->|"order + order_number"| ORDER["SetSlotsCommand<br/>order_number = object.id"]
+    MATCH -->|"product + product_id"| PRODUCT["SetSlotsCommand<br/>product_id = object.id"]
+    MATCH -->|"不匹配"| CLARIFY["澄清：想对这个对象做什么？"]
+    NONE --> CLARIFY
+    ORDER --> TASK["TaskHandler 继续原 Flow"]
+    PRODUCT --> TASK
+

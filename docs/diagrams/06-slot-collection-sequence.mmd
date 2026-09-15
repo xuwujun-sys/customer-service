@@ -1,0 +1,43 @@
+sequenceDiagram
+    actor U as 用户
+    participant API as FastAPI
+    participant SVC as DialogueService
+    participant ENG as DialogueEngine
+    participant PLAN as TurnPlanner
+    participant TASK as TaskHandler
+    participant FLOW as FlowExecutor
+    participant DB as MySQL
+
+    U->>API: 帮我查物流
+    API->>SVC: Message(TEXT)
+    SVC->>DB: load_state(sender_id)
+    DB-->>SVC: DialogueState
+    SVC->>ENG: process_message
+    ENG->>PLAN: predict
+    PLAN-->>ENG: start_flow(logistics_tracking)
+    ENG->>TASK: handle(commands)
+    TASK->>FLOW: run_task
+    Note over TASK,FLOW: active_task 停在 ask_order_number<br/>创建 CollectSystemContext
+    FLOW-->>TASK: 请告诉我订单号 + action_listen
+    TASK-->>ENG: BotMessages
+    ENG-->>SVC: 提交本轮 Turn
+    SVC->>DB: save_state
+    SVC-->>API: ProcessResult
+    API-->>U: 请告诉我订单号
+
+    U->>API: ORDER1001
+    API->>SVC: 新的 Message(TEXT)
+    SVC->>DB: load_state(sender_id)
+    DB-->>SVC: 恢复原 step、slots、CollectSystemContext
+    SVC->>ENG: process_message
+    ENG->>PLAN: predict
+    PLAN-->>ENG: set_slots(order_number=ORDER1001)
+    ENG->>TASK: handle(commands)
+    Note over TASK,FLOW: 填槽并结束 CollectSystemContext
+    TASK->>FLOW: run_task
+    Note over TASK,FLOW: 回到 active_task 的 collect Step<br/>发现槽位已有值，继续 lookup_logistics
+    FLOW-->>TASK: 物流查询结果
+    TASK-->>ENG: BotMessages
+    ENG-->>SVC: 提交本轮 Turn
+    SVC->>DB: save_state
+    API-->>U: 返回物流公司、单号和进度

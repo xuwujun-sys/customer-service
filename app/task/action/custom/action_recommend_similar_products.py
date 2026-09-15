@@ -1,3 +1,10 @@
+"""在现有电商接口能力上实现可解释的相似商品推荐 Action。
+
+项目没有专门推荐接口，因此先查当前商品，再从用户最近商品构造候选池，并发查询
+详情后按属性相似度、价格差排序。不同于查询型 Action，本 Flow 后面直接 end，
+所以本动作自行产生 BotMessage 而非只返回槽位。
+"""
+
 import asyncio
 from typing import Any
 
@@ -6,6 +13,7 @@ from app.domain.dialogue_state import DialogueState
 from app.infrastructure import commerce_client
 from app.task.action.base import Action, ActionResult
 
+# 最多展示三项，避免客服回复过长；最多并发查询八个候选，限制外部接口压力。
 TOP_N = 3
 MAX_CANDIDATES = 8
 
@@ -24,8 +32,15 @@ class ActionRecommendSimilarProducts(Action):
     name = 'action_recommend_similar_products'
 
     async def run(self, state: DialogueState, action_kwargs: dict[str, Any]) -> ActionResult:
+        """从槽位/聚焦对象取得商品 ID，构造候选并返回可解释推荐文本。
+
+        参数 ``action_kwargs`` 当前未使用。输入数据来自 active_task.slots、
+        focused_object 和 sender_id；返回只含消息、不更新槽位。
+        """
         slots = state.active_task.slots if state.active_task else {}
         product_id = str(slots.get("product_id") or "").strip()
+
+        # Collect Step 通常已自动补槽；这里再次使用 focused_object 是防御性兜底。
         if not product_id and state.focused_object is not None and state.focused_object.type == "product":
             product_id = str(state.focused_object.id or "").strip()
 
@@ -55,6 +70,7 @@ class ActionRecommendSimilarProducts(Action):
                 f"暂时没有帮你找到和{_title(current)}相近的商品。" + _describe(current, prefix="这款本身是：")
             )
 
+        # 候选详情互不依赖，并发查询可避免串行网络等待成倍增加响应时间。
         details = await asyncio.gather(*[
             _safe_detail(str(item["product_id"])) for item in candidates[:MAX_CANDIDATES]
         ])
@@ -64,6 +80,7 @@ class ActionRecommendSimilarProducts(Action):
                 f"暂时没有帮你找到和{_title(current)}相近的商品。" + _describe(current, prefix="这款本身是：")
             )
 
+        # 至少共享一个属性维度才称为“规格相近”，否则明确降级为价格近似。
         matched = [item for item in scored if item[1][0] > 0]
         if matched:
             matched.sort(key=lambda item: (-item[1][0], _price_gap(current, item[0])))
@@ -82,10 +99,12 @@ class ActionRecommendSimilarProducts(Action):
 
     @staticmethod
     def _message(text: str) -> ActionResult:
+        """把纯文本统一包装成 ActionRunner 约定的消息结果。"""
         return ActionResult(messages=[BotMessage(text=text)])
 
 
 async def _safe_detail(product_id: str) -> dict[str, Any] | None:
+    """查询单个候选详情；某一候选失败时返回 None，不中断整批推荐。"""
     try:
         return await commerce_client.get_data(f"/products/{product_id}")
     except commerce_client.CommerceError:
@@ -115,6 +134,7 @@ def _similarity(current: dict[str, Any], other: dict[str, Any]) -> tuple[int, li
 
 
 def _price_gap(current: dict[str, Any], other: dict[str, Any]) -> float:
+    """计算价格绝对差；无法转换的价格排到候选末尾。"""
     try:
         return abs(float(current.get("price") or 0) - float(other.get("price") or 0))
     except (TypeError, ValueError):
@@ -132,10 +152,12 @@ def _reason_text(similarity: tuple[int, list[str], list[str]]) -> str:
 
 
 def _title(product: dict[str, Any]) -> str:
+    """生成回复中引用当前商品的短标题，缺标题时使用通用占位。"""
     return f"《{product.get('title') or '这个商品'}》"
 
 
 def _describe(product: dict[str, Any], prefix: str = "") -> str:
+    """将商品标题、价格、库存和描述压缩为一段自然语言。"""
     bits = [str(product.get("title") or ""), f"售价 {product.get('price')} 元"]
     if product.get("stock_status"):
         bits.append(str(product["stock_status"]))

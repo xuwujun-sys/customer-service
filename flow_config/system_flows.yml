@@ -1,4 +1,12 @@
+# 【文件职责】声明任务编排所需的内部辅助 Flow，而非用户直接选择的业务能力。
+# 【创建者】CommandProcessor/FlowExecutor 根据固定 ID 创建对应 SystemContext。
+# 【执行优先级】只要 active_system_task 存在，FlowExecutor 就优先执行它；结束后
+# 才回到底下未丢失的 active_task。
+# 【关键联动】Flow ID 必须与 contexts.mapping_types、CommandProcessor 中硬编码
+# 字符串一致；context.xxx 模板字段必须存在于相应 SystemContext dataclass。
+
 flows:
+  # 新业务开始确认：StartedSystemContext 提供 started_flow_name。
   system_task_started:
     description: Flow for acknowledging that a new task has started
     name: task started acknowledgement
@@ -19,6 +27,7 @@ flows:
         type: end
         next: []
 
+  # 暂停任务恢复确认：只负责提示，结束后回到已恢复的用户 TaskContext。
   system_task_resumed:
     description: Flow for acknowledging that a paused task has been resumed
     name: task resumed acknowledgement
@@ -39,6 +48,7 @@ flows:
         type: end
         next: []
 
+  # 空的完成标记 Flow，目前仅提供可表达的系统状态。
   system_completed:
     description: A flow has been completed and there is nothing else to be done
     name: completion marker
@@ -51,12 +61,14 @@ flows:
         type: end
         next: []
 
+  # 系统无法处理时按 context.reason 选择话术；当前主引擎尚未接入这些分支。
   system_cannot_handle:
     description: Flow for handling requests the assistant cannot support
     name: cannot handle request
     steps:
       - id: start
         type: start
+        # ConditionalLink 从上到下匹配；else 是所有未知 reason 的兜底。
         next:
           - if: "context.get('reason') == 'clarification_rejected'"
             then: clarification_rejected
@@ -138,6 +150,7 @@ flows:
         type: end
         next: []
 
+  # 槽位收集临时任务：这是“询问后暂停本轮、下次请求继续”的核心系统 Flow。
   system_collect_information:
     description: Flow for asking the user for a slot value during a collect step
     name: collect information
@@ -149,11 +162,13 @@ flows:
       - id: ask
         type: action
         action: action_response
+        # 字符串参数由 Executor 解析为 CollectSystemContext.response 字典。
         args: context.response
         next: listen
 
       - id: listen
         type: action
+        # Executor 见到该名称直接结束本轮，不会真正运行 ActionListen.run。
         action: action_listen
         next: end
 
@@ -161,6 +176,7 @@ flows:
         type: end
         next: []
 
+  # 新任务打断旧任务时的提示；底层 active_task 已切换，旧任务在 paused_tasks。
   system_task_interrupted:
     description: Flow for acknowledging that the current task has been interrupted
     name: task interrupted acknowledgement
@@ -192,6 +208,7 @@ flows:
         type: end
         next: []
 
+  # 取消确认：CanceledSystemContext 保存被取消 Flow 的可读名称。
   system_task_canceled:
     description: Flow for acknowledging that the current task was canceled
     name: task canceled acknowledgement

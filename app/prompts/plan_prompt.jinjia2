@@ -1,3 +1,11 @@
+{#
+  【模块职责】TurnPlanner 的核心规划提示词。
+  【上游】plan._build_prompt_inputs 提供下方所有模板变量。
+  【下游】JsonOutputParser -> TurnPlan.from_dict -> TurnPlanValidator。
+  【联动】顶层字段、Command 名、Flow/Intent ID 都是跨模块协议；修改时必须同步
+  plan.models、task.command.models、Validator 和 Python 侧模板输入键。
+  Jinja 注释只帮助阅读，渲染时不会发送给 LLM。
+#}
 ## 任务说明
 你的任务是分析当前对话上下文，并生成一个 TurnPlan JSON。
 
@@ -18,6 +26,7 @@ TurnPlan 顶层只允许以下三个字段：
 ---
 
 ## Task 结构
+{# task.commands 的数组顺序就是 CommandProcessor 的实际执行顺序。 #}
 当用户是在办理业务时，填写 `task`：
 
 Task 对象示例：
@@ -37,6 +46,7 @@ Task 对象示例：
 - `set_slots`
 
 可用 flows：
+{# Python 侧已移除 steps，只暴露 id/name/description/slots，避免模型操纵内部游标。 #}
 {{ available_flows_json }}
 
 ---
@@ -50,6 +60,7 @@ Knowledge 对象示例：
 }
 
 允许的 intent（从下列选项中选择，可以选择一个或多个）：
+{# 每个 ID 必须能在 KNOWLEDGE_INTENTS 中找到，否则后续 Provider 无法解析。 #}
 {{ knowledge_intents_json }}
 
 ---
@@ -65,17 +76,21 @@ Chitchat 对象示例：
 ## 当前状态
 
 ### Active Task
+{# 用于判断用户是在补当前槽位、取消任务，还是启动其他业务。 #}
 {{ active_task_json }}
 
 ### Interrupted Tasks
+{# paused_tasks 的 flow_id/step_id/slots 让模型能够输出 resume_flow。 #}
 {{ interrupted_tasks_json }}
 
 ### Focused Object
+{# 解决“这个商品/这笔订单”的指代，并供对象依赖型知识意图校验。 #}
 {{ focused_object_json }}
 
 ---
 
 ## 对话历史
+{# 这里只含已提交 Turn，本轮最新话语在 user_message 中单独给出。 #}
 {{ current_conversation }}
 
 ---

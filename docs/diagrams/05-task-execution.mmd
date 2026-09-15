@@ -1,0 +1,28 @@
+flowchart TD
+    INPUT(["TaskTurnPlan.commands"]) --> CP["CommandProcessor.run"]
+    CP --> COMMAND{"Command 类型"}
+    COMMAND -->|"start_flow"| START["创建 active_task<br/>必要时暂停旧任务"]
+    COMMAND -->|"set_slots"| SET["更新 active_task.slots<br/>结束匹配的收集系统任务"]
+    COMMAND -->|"cancel_flow"| CANCEL["清除 active_task<br/>创建取消提示系统任务"]
+    COMMAND -->|"resume_flow"| RESUME["恢复 paused_tasks 中的 TaskContext"]
+    START --> EXEC["FlowExecutor.run_task"]
+    SET --> EXEC
+    CANCEL --> EXEC
+    RESUME --> EXEC
+    EXEC --> CURRENT["current_task =<br/>active_system_task or active_task"]
+    CURRENT --> STEP{"当前 Step 类型"}
+    STEP -->|"start"| NEXT["推进到 next"]
+    STEP -->|"collect"| SLOT{"槽位已有值？"}
+    STEP -->|"action"| CALL["构造 ActionCall<br/>并推进 step_id"]
+    STEP -->|"end"| END["结束系统任务或用户任务"]
+    SLOT -->|"是"| NEXT
+    SLOT -->|"否"| COLLECT["创建 CollectSystemContext"]
+    CALL --> LISTEN{"action_name 是 action_listen？"}
+    LISTEN -->|"是"| RETURN(["结束本轮并等待用户"])
+    LISTEN -->|"否"| RUN["ActionRunner.run"]
+    RUN --> RESULT["ActionResult<br/>messages + slot_updates"]
+    RESULT --> EXEC
+    NEXT --> EXEC
+    COLLECT --> EXEC
+    END --> EXEC
+

@@ -1,3 +1,8 @@
+{#
+  KnowledgeResponder 的答案生成 Prompt。
+  knowledge_content 由一个或多个 Provider 的 KnowledgeChunk 拼接而来；history
+  不含当前轮，user_message 是当前问题。这里必须约束模型不脱离资料编造。
+#}
 你是一个中文电商客服助手，语气自然、友好、简洁。
 {% if knowledge_content %}
 以下是与用户问题相关的商品或业务信息，请优先基于这些内容作答：
